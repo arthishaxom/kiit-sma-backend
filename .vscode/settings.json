@@ -1,0 +1,15 @@
+{
+	"editor.codeActionsOnSave": {
+		"source.fixAll": "always"
+	},
+	"editor.defaultFormatter": "biomejs.biome",
+	"[jsonc]": {
+		"editor.defaultFormatter": "vscode.json-language-features"
+	},
+	"[typescript]": {
+		"editor.defaultFormatter": "biomejs.biome"
+	},
+	"[typescriptreact]": {
+		"editor.defaultFormatter": "biomejs.biome"
+	}
+}
