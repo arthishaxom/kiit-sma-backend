@@ -1,22 +1,79 @@
-import "dotenv/config";
-import { createServer } from "node:http";
-import app from "./app";
-import { logger } from "./config/logger.config";
-import { initializeSocket } from "./socket";
+/** biome-ignore-all lint/style/noNonNullAssertion: ENV */
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
+import "dotenv/config"; // Load .env
 
-const PORT = process.env.PORT || 8080;
+import attendanceRoutes from "./routes/attendance";
+import eventsRoutes from "./routes/events";
+import feesRoutes from "./routes/fees";
+import scheduleRoutes from "./routes/schedule";
+import sectionRoutes from "./routes/sections";
+import userRoutes from "./routes/users";
+import type { Variables } from "./types/auth";
 
-const startServer = async () => {
-  try {
-    const server = createServer(app);
-    initializeSocket(server);
-    server.listen(PORT, () => {
-      logger.info(`Server is listening on port ${PORT}`);
-    });
-  } catch (error) {
-    logger.error("Error starting server:", error);
-    process.exit(1);
-  }
+const app = new Hono<{ Variables: Variables }>().basePath("/api/v1");
+
+app.onError((err, c) => {
+	console.log(`${err}`); // Log the error for debugging
+
+	if (err instanceof HTTPException) {
+		console.error(err.cause);
+		// Get the custom response
+		return err.getResponse();
+	}
+	// Determine the status code and message
+	const message = err.message || "Internal Server Error";
+
+	// Return a custom error response
+	return c.json({ error: message }, 500);
+});
+
+const supabase: SupabaseClient = createClient(
+	process.env.SUPABASE_URL!,
+	process.env.SUPABASE_SERVICE_ROLE_KEY!,
+);
+
+// CORS must be configured BEFORE other middleware
+app.use(
+	"*",
+	cors({
+		origin: "*", // In production, replace with your actual domain
+		allowHeaders: [
+			"Content-Type",
+			"Authorization",
+			"Accept",
+			"Origin",
+			"X-Requested-With",
+		],
+		allowMethods: ["POST", "GET", "PUT", "DELETE", "OPTIONS", "PATCH"],
+		exposeHeaders: ["Content-Length", "X-Request-Id"],
+		maxAge: 600,
+		credentials: true,
+	}),
+);
+
+app.use("*", (c, next) => {
+	c.set("supabase", supabase);
+	return next();
+});
+
+app.route("/users", userRoutes);
+app.route("/sections", sectionRoutes);
+app.route("/fees", feesRoutes);
+app.route("/events", eventsRoutes);
+app.route("/schedule", scheduleRoutes);
+app.route("/attendance", attendanceRoutes);
+
+app.get("/healthcheck", (c) => {
+	return c.text("KIIT SAP Backend API is running!");
+});
+
+const port = process.env.PORT || 3000;
+console.log(`Server is running on port ${port}`);
+
+export default {
+	port,
+	fetch: app.fetch,
 };
-
-startServer();
