@@ -128,13 +128,15 @@ app.post("/review-resume", async (c) => {
 		} catch (pdfError) {
 			console.error("PDF parsing error:", pdfError);
 			throw new HTTPException(500, {
-				message: "Failed to parse PDF. The file may be corrupted or in an unsupported format.",
+				message:
+					"Failed to parse PDF. The file may be corrupted or in an unsupported format.",
 			});
 		}
 
 		if (!resume_text || resume_text.trim().length === 0) {
 			throw new HTTPException(400, {
-				message: "Could not extract text from PDF. The document may be image-based or empty.",
+				message:
+					"Could not extract text from PDF. The document may be image-based or empty.",
 			});
 		}
 	} catch (e: unknown) {
