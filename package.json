@@ -3,7 +3,7 @@
 	"main": "src/index.ts",
 	"scripts": {
 		"dev": "bun run --hot src/index.ts",
-		"start": "bun build ./src/index.ts --production && bun ./dist/index.js"
+		"start": "bun run src/index.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/google": "^3.0.0-beta.39",
