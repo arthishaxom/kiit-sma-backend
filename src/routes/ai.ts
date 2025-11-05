@@ -105,7 +105,7 @@ app.post("/review-resume", async (c) => {
 	try {
 		// Get the multipart form data
 		const body = await c.req.parseBody();
-		const file = body.resume_file; // 'resume_file' is the key from Flutter
+		const file = body.resume_file;
 
 		if (!(file instanceof File)) {
 			throw new HTTPException(400, { message: "No file provided." });
@@ -118,15 +118,23 @@ app.post("/review-resume", async (c) => {
 		const fileBuffer = await file.arrayBuffer();
 		const uint8Array = new Uint8Array(fileBuffer);
 
-		// Initialize parser with buffer data
-		const parser = new PDFParse({ data: uint8Array });
-		const pdfData = await parser.getText();
+		try {
+			// Initialize parser with buffer data
+			const parser = new PDFParse({ data: uint8Array });
+			const pdfData = await parser.getText();
+			await parser.destroy();
 
-		resume_text = pdfData.text;
+			resume_text = pdfData.text;
+		} catch (pdfError) {
+			console.error("PDF parsing error:", pdfError);
+			throw new HTTPException(500, {
+				message: "Failed to parse PDF. The file may be corrupted or in an unsupported format.",
+			});
+		}
 
-		if (!resume_text) {
+		if (!resume_text || resume_text.trim().length === 0) {
 			throw new HTTPException(400, {
-				message: "Could not read text from PDF.",
+				message: "Could not extract text from PDF. The document may be image-based or empty.",
 			});
 		}
 	} catch (e: unknown) {
