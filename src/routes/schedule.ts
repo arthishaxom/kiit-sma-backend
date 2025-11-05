@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
 import type { Variables } from "@/types/auth";
 import { authMiddleware } from "../middlewares/auth";
 
@@ -37,10 +38,11 @@ app.get("/today", async (c) => {
 	// ----------------------------------------
 
 	let query = supabase.from("timetables").select(`
-    id, room_number, start_time, end_time,
-    courses ( course_name, course_code, course_id:id ),
-    sections ( section_name, branch, year, id )
-  `);
+	id, room_number, start_time, end_time,
+	courses ( course_name, course_code, course_id:id ),
+	sections ( section_name, branch, year, id ),
+	teacher:users!timetables_teacher_id_fkey ( id, full_name, role )
+	`);
 
 	// --- Build query based on user role ---
 	if (user.role === "student") {
@@ -52,7 +54,7 @@ app.get("/today", async (c) => {
 			.eq("user_id", user.id);
 
 		if (enrollmentError) {
-			return c.json({ error: enrollmentError.message }, 500);
+			throw new HTTPException(500, { message: enrollmentError.message });
 		}
 
 		// Create an array of strings: ['sec-uuid-1', 'sec-uuid-2']
@@ -63,7 +65,6 @@ app.get("/today", async (c) => {
 			return c.json([]);
 		}
 
-		console.log(sectionIds);
 		// 2. Use the array of IDs in the main query
 		query = query
 			.in("section_id", sectionIds) // <-- Now this is a valid array
@@ -80,21 +81,67 @@ app.get("/today", async (c) => {
 	const { data, error } = await query.order("start_time");
 
 	if (error) {
-		return c.json({ error: error.message }, 500);
+		throw new HTTPException(500, { message: error.message });
 	}
 
 	// Return the list of classes for the day
 	return c.json(data);
 });
+
+/**
+ * GET /api/schedule/full
+ * UI: Populates the dedicated "Full Schedule" tab.
+ * Returns the user's complete timetable for all days.
+ */
+app.get("/full", async (c) => {
+	const supabase = c.get("supabase");
+	const user = c.get("user");
+
+	let query = supabase.from("timetables").select(`
+	id, day, room_number, start_time, end_time,
+	courses ( course_name, course_code, course_id:id ),
+	sections ( section_name, branch, year, id ),
+	teacher:users!timetables_teacher_id_fkey ( id, full_name, role )
+	`);
+
+	if (user.role === "student") {
+		// Get all section IDs for the student
+		const { data: enrollments, error: enrollError } = await supabase
+			.from("enrollments")
+			.select("section_id")
+			.eq("user_id", user.id);
+
+		if (enrollError) {
+			throw new HTTPException(500, { message: enrollError.message });
+		}
+		if (!enrollments || enrollments.length === 0) return c.json([]);
+
+		const sectionIds = enrollments.map((e) => e.section_id);
+		query = query.in("section_id", sectionIds);
+	} else if (user.role === "teacher") {
+		query = query.eq("teacher_id", user.id);
+	} else {
+		return c.json([]);
+	}
+
+	// Order by day, then by time
+	const { data, error } = await query.order("day").order("start_time");
+
+	if (error) {
+		throw new HTTPException(500, { message: error.message });
+	}
+	return c.json(data);
+});
+
 app.get("/", async (c) => {
 	const supabase = c.get("supabase");
 	const user = c.get("user");
 
 	let query = supabase.from("timetables").select(`
-    id, room_number, start_time, end_time,
-    courses ( course_name, course_code ),
-    sections ( section_name, branch, year )
-  `);
+	id, room_number, start_time, end_time,
+	courses ( course_name, course_code ),
+	sections ( section_name, branch, year )
+	`);
 
 	// --- Build query based on user role ---
 	if (user.role === "student") {
@@ -106,7 +153,7 @@ app.get("/", async (c) => {
 			.eq("user_id", user.id);
 
 		if (enrollmentError) {
-			return c.json({ error: enrollmentError.message }, 500);
+			throw new HTTPException(500, { message: enrollmentError.message });
 		}
 
 		// Create an array of strings: ['sec-uuid-1', 'sec-uuid-2']
@@ -132,7 +179,7 @@ app.get("/", async (c) => {
 	const { data, error } = await query.order("start_time");
 
 	if (error) {
-		return c.json({ error: error.message }, 500);
+		throw new HTTPException(500, { message: error.message });
 	}
 
 	// Return the list of classes for the day

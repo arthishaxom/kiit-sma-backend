@@ -5,11 +5,15 @@ import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import "dotenv/config"; // Load .env
 
+import aiRoutes from "./routes/ai";
 import attendanceRoutes from "./routes/attendance";
-import eventsRoutes from "./routes/events";
+import chatRoutes from "./routes/chat";
 import feesRoutes from "./routes/fees";
+import gradesRoutes from "./routes/grades";
+import noticesRoutes from "./routes/notices";
 import scheduleRoutes from "./routes/schedule";
 import sectionRoutes from "./routes/sections";
+import teacherRoutes from "./routes/teacher";
 import userRoutes from "./routes/users";
 import type { Variables } from "./types/auth";
 
@@ -62,9 +66,13 @@ app.use("*", (c, next) => {
 app.route("/users", userRoutes);
 app.route("/sections", sectionRoutes);
 app.route("/fees", feesRoutes);
-app.route("/events", eventsRoutes);
+app.route("/grades", gradesRoutes);
+app.route("/notices", noticesRoutes);
 app.route("/schedule", scheduleRoutes);
 app.route("/attendance", attendanceRoutes);
+app.route("/chat", chatRoutes);
+app.route("/ai", aiRoutes);
+app.route("/teacher", teacherRoutes);
 
 app.get("/healthcheck", (c) => {
 	return c.text("KIIT SAP Backend API is running!");

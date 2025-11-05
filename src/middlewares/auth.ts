@@ -27,7 +27,7 @@ export const authMiddleware = async (c: Context, next: Next) => {
 	const serviceSupabase: SupabaseClient = c.get("supabase");
 	const { data: profile, error: profileError } = await serviceSupabase
 		.from("users")
-		.select("id, role, email, full_name, roll_no")
+		.select("id, role, email, full_name, roll_no, avatar_url")
 		.eq("id", user.id)
 		.single();
 

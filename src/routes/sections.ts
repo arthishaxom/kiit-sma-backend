@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
 import type { Variables } from "@/types/auth";
 import { authMiddleware, roleGuard } from "../middlewares/auth";
 
@@ -20,7 +21,7 @@ app.get("/", roleGuard(["student"]), async (c) => {
 		.select();
 
 	if (error) {
-		return c.json({ error: error.message }, 500);
+		throw new HTTPException(500, { message: error.message });
 	}
 	return c.json(data);
 });
@@ -40,10 +41,10 @@ app.post("/:sectionId/enroll", roleGuard(["student"]), async (c) => {
 	});
 
 	if (error) {
-		return c.json({ error: error.message }, 400);
+		throw new HTTPException(400, { message: error.message });
 	}
 	if (data !== "Enrolled successfully") {
-		return c.json({ error: data }, 400);
+		throw new HTTPException(401, { message: data });
 	}
 
 	return c.json({ success: true, message: "Enrolled successfully" });
@@ -66,13 +67,13 @@ app.get("/my", async (c) => {
 	const { data, error } = await supabase
 		.from("enrollments")
 		.select(`
-      section_id,
-      sections ( section_name, branch, year )
-    `) // Also get the details of the sections they are in
+		section_id,
+		sections ( section_name, branch, year )
+	`) // Also get the details of the sections they are in
 		.eq("user_id", user.id);
 
 	if (error) {
-		return c.json({ error: error.message }, 500);
+		throw new HTTPException(500, { message: error.message });
 	}
 
 	// This will return [] if not enrolled, which is exactly
@@ -90,7 +91,7 @@ app.get("/my-courses", async (c) => {
 	});
 
 	if (error) {
-		return c.json({ error: error.message }, 500);
+		throw new HTTPException(500, { message: error.message });
 	}
 
 	return c.json(data);
