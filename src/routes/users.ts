@@ -33,7 +33,9 @@ app.delete("/me/reset", async (c) => {
 		});
 	}
 
-	const { error } = await supabase.rpc("reset_student_for_testing");
+	const { error } = await supabase.rpc("reset_student_for_testing", {
+		user_id: user.id,
+	});
 
 	if (error) {
 		throw new HTTPException(500, { message: error.message });
