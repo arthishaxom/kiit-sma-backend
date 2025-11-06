@@ -1,13 +1,32 @@
 import { google } from "@ai-sdk/google";
-import { type CoreMessage, generateText, stepCountIs } from "ai";
+import { type CoreMessage, generateText, stepCountIs, tool } from "ai";
 import { Hono } from "hono";
 import "dotenv/config";
 import type { AuthUser, SupabaseClient } from "@supabase/supabase-js";
+import { tavily } from "@tavily/core";
 import { HTTPException } from "hono/http-exception";
 import { PDFParse } from "pdf-parse";
 import { z } from "zod";
 import { authMiddleware } from "@/middlewares/auth";
 import type { Variables } from "@/types/auth";
+
+export const tavilyClient = tavily({ apiKey: process.env.TAVILY_API_KEY });
+
+export const webSearch = tool({
+	description: "Search the web for up-to-date information",
+	inputSchema: z.object({
+		query: z.string().min(1).max(100).describe("The search query"),
+	}),
+	execute: async ({ query }) => {
+		const response = await tavilyClient.search(query);
+		return response.results.map((result) => ({
+			title: result.title,
+			url: result.url,
+			content: result.content,
+			score: result.score,
+		}));
+	},
+});
 
 const app = new Hono<{ Variables: Variables }>();
 app.use("*", authMiddleware);
@@ -15,22 +34,124 @@ app.use("*", authMiddleware);
 /**
  * POST /api/ai/chat
  * Main chatbot with tools for student data + Google Search
+ * Now supports file attachments (images, PDFs, etc.)
  */
 app.post("/chat", async (c) => {
-	const { messages }: { messages: CoreMessage[] } = await c.req.json();
+	// Parse the request body - could be JSON or multipart form data
+	const contentType = c.req.header("content-type") || "";
+	let messages: CoreMessage[];
+	const attachedFiles: File[] = [];
+
+	if (contentType.includes("multipart/form-data")) {
+		// Handle multipart form data with file attachments
+		const body = await c.req.parseBody();
+		const messagesJson = body.messages;
+
+		if (typeof messagesJson !== "string") {
+			throw new HTTPException(400, {
+				message: "messages field is required in multipart request",
+			});
+		}
+
+		messages = JSON.parse(messagesJson);
+
+		// Collect all file attachments
+		for (const [key, value] of Object.entries(body)) {
+			if (key.startsWith("file_") && value instanceof File) {
+				attachedFiles.push(value);
+			}
+		}
+	} else {
+		// Handle regular JSON request
+		const jsonBody = await c.req.json();
+		messages = jsonBody.messages;
+	}
+
 	const supabase: SupabaseClient = c.get("supabase");
 	const user = c.get("user") as AuthUser;
 
+	// Process file attachments and add them to the last user message
+	if (attachedFiles.length > 0 && messages.length > 0) {
+		const lastMessage = messages[messages.length - 1];
+		if (lastMessage.role === "user") {
+			// Convert content to array format if it's a string
+			let textContent = "";
+			if (typeof lastMessage.content === "string") {
+				textContent = lastMessage.content;
+			} else if (Array.isArray(lastMessage.content)) {
+				const textPart = lastMessage.content.find(
+					(part) => part.type === "text",
+				);
+				textContent = textPart?.type === "text" ? textPart.text : "";
+			}
+
+			const contentParts: Array<
+				| { type: "text"; text: string }
+				| { type: "image"; image: Uint8Array }
+				| {
+						type: "file";
+						data: Uint8Array;
+						mediaType: string;
+						filename?: string;
+				  }
+			> = [{ type: "text", text: textContent }];
+
+			// Add file attachments
+			for (const file of attachedFiles) {
+				const fileBuffer = await file.arrayBuffer();
+				const uint8Array = new Uint8Array(fileBuffer);
+
+				// Determine if it's an image or other file type
+				if (file.type.startsWith("image/")) {
+					contentParts.push({
+						type: "image",
+						image: uint8Array,
+					});
+				} else {
+					// For PDFs and other files
+					contentParts.push({
+						type: "file",
+						data: uint8Array,
+						mediaType: file.type,
+						filename: file.name,
+					});
+				}
+			}
+
+			lastMessage.content = contentParts;
+		}
+	}
+
 	const result = await generateText({
 		model: google("gemini-2.5-flash"),
-		system:
-			"You are a helpful KIIT University student assistant. " +
-			"Use the available tools to fetch real-time student information when needed. " +
-			"Always provide accurate, helpful responses based on the data you retrieve. " +
-			"Be conversational and supportive.",
+		system: `
+You are KIIT University’s official student assistant.
+You have access to several tools for accurate, real-time answers.
+
+Use tools **whenever relevant**, and your own reasoning otherwise.
+
+**When to use tools:**
+- For student-specific data:
+  - Use getAttendanceSummary → for attendance details.
+  - Use getFeeSummary → for fee payment, due, or status.
+  - Use getGrades → for GPA, marks, or academic performance.
+- For general factual or event-related queries (like holidays, notices, or KIIT info):
+  - Use google_search to look up the latest, verified information.
+
+**When not to use tools:**
+- For simple conceptual or conversational questions (e.g. “How can I study better?”),
+  answer directly without calling tools.
+
+**Response style:**
+- Be concise, clear, and conversational.
+- Always summarize data retrieved from tools in a natural, student-friendly tone.
+- Never show raw data or JSON.
+- If a tool fails or returns no data, respond gracefully (e.g. “I couldn’t find that right now.”).
+`,
 		messages,
 		stopWhen: stepCountIs(5),
 		tools: {
+			webSearch,
 			getAttendanceSummary: {
 				description:
 					"Get the student's current attendance summary including percentage, total classes, and attended classes.",
@@ -110,8 +231,20 @@ app.post("/review-resume", async (c) => {
 		if (!(file instanceof File)) {
 			throw new HTTPException(400, { message: "No file provided." });
 		}
-		if (file.type !== "application/octet-stream") {
-			throw new HTTPException(400, { message: "File must be a PDF." });
+
+		// Check if it's a PDF by MIME type or file extension
+		const isPdf =
+			file.type === "application/pdf" ||
+			file.name?.toLowerCase().endsWith(".pdf");
+
+		if (!isPdf) {
+			throw new HTTPException(400, {
+				message:
+					"File must be a PDF. Received type: " +
+					(file.type || "unknown") +
+					", name: " +
+					(file.name || "unknown"),
+			});
 		}
 
 		// Extract text from the PDF using pdf-parse v2 API
