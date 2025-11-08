@@ -135,6 +135,7 @@ Use tools **whenever relevant**, and your own reasoning otherwise.
   - Use getAttendanceSummary → for attendance details.
   - Use getFeeSummary → for fee payment, due, or status.
   - Use getGrades → for GPA, marks, or academic performance.
+  - Use getSchedule → for class schedule, timings, room numbers, and course information.
 - For general factual or event-related queries (like holidays, notices, or KIIT info):
   - Use google_search to look up the latest, verified information.
 
@@ -146,7 +147,8 @@ Use tools **whenever relevant**, and your own reasoning otherwise.
 - Be concise, clear, and conversational.
 - Always summarize data retrieved from tools in a natural, student-friendly tone.
 - Never show raw data or JSON.
-- If a tool fails or returns no data, respond gracefully (e.g. “I couldn’t find that right now.”).
+- If a tool fails or returns no data, respond gracefully (e.g. "I couldn't find that right now.").
+- For schedule queries, format the information in an easy-to-read way with day, time, course, and location.
 `,
 		messages,
 		stopWhen: stepCountIs(5),
@@ -206,6 +208,64 @@ Use tools **whenever relevant**, and your own reasoning otherwise.
 						.select("semester, sgpa, letter_grade, courses(course_name)")
 						.eq("user_id", user.id)
 						.order("semester");
+					if (error) throw new HTTPException(500, { message: error.message });
+					return data;
+				},
+			},
+			getSchedule: {
+				description:
+					"Get the student's full weekly class schedule including course names, instructors, timings, days, and room locations. Use this for queries about classes, timetables, what's next, when a specific course is, or where a class is held.",
+				inputSchema: z.object({}),
+				execute: async () => {
+					// Get the student's section IDs first (same logic as schedule.ts)
+					const { data: enrollments, error: enrollmentError } = await supabase
+						.from("enrollments")
+						.select("section_id")
+						.eq("user_id", user.id);
+
+					if (enrollmentError) {
+						throw new HTTPException(500, { message: enrollmentError.message });
+					}
+
+					if (!enrollments || enrollments.length === 0) {
+						return []; // Student not enrolled in any sections
+					}
+
+					const sectionIds = enrollments.map((e) => e.section_id);
+
+					// Query timetables using the section IDs
+					const { data, error } = await supabase
+						.from("timetables")
+						.select(
+							`
+							id,
+							day,
+							room_number,
+							start_time,
+							end_time,
+							courses (
+								course_code,
+								course_name,
+								course_id:id
+							),
+							sections (
+								section_name,
+								branch,
+								year,
+								id
+							),
+							teacher:users!timetables_teacher_id_fkey (
+								id,
+								full_name,
+								email,
+								role
+							)
+						`,
+						)
+						.in("section_id", sectionIds)
+						.order("day")
+						.order("start_time");
+
 					if (error) throw new HTTPException(500, { message: error.message });
 					return data;
 				},
