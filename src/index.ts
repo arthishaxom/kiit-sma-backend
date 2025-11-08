@@ -43,7 +43,7 @@ const supabase: SupabaseClient = createClient(
 app.use(
 	"*",
 	cors({
-		origin: ["https://kiitsap.netlify.app"], // In production, replace with your actual domain
+		origin: "*", // In production, replace with your actual domain
 		allowHeaders: [
 			"Content-Type",
 			"Authorization",
