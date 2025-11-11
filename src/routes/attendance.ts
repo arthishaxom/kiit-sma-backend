@@ -1,6 +1,7 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import type { Variables } from "@/types/auth";
+import type { AuthUser, Variables } from "@/types/auth";
 import { authMiddleware, roleGuard } from "../middlewares/auth";
 
 // Initialize a new Hono router
@@ -18,8 +19,8 @@ app.use("*", authMiddleware);
  * This endpoint calls the `get_student_attendance_summary` SQL function.
  */
 app.get("/summary", roleGuard(["student"]), async (c) => {
-	const supabase = c.get("supabase");
-	const user = c.get("user");
+	const supabase: SupabaseClient = c.get("supabase");
+	const user = c.get("user") as AuthUser;
 
 	// Call the database function to do all the complex calculations
 	const { data, error } = await supabase.rpc("get_student_attendance_summary", {
@@ -44,11 +45,16 @@ app.get("/summary", roleGuard(["student"]), async (c) => {
  * Generates a short-lived token and returns it to the teacher's app.
  */
 app.post("/session", roleGuard(["teacher"]), async (c) => {
-	const supabase = c.get("supabase");
-	const user = c.get("user");
+	const supabase: SupabaseClient = c.get("supabase");
+	const user = c.get("user") as AuthUser;
 
 	// 1. Get the payload from the teacher's app
-	const { course_id, section_id, latitude, longitude } = await c.req.json();
+	const { course_id, section_id, latitude, longitude } = await c.req.json<{
+		course_id: string;
+		section_id: string;
+		latitude: number;
+		longitude: number;
+	}>();
 
 	// 2. Validate input
 	if (
@@ -97,11 +103,15 @@ app.post("/session", roleGuard(["teacher"]), async (c) => {
  * This endpoint calls the `validate_attendance_scan` SQL function.
  */
 app.post("/scan", roleGuard(["student"]), async (c) => {
-	const supabase = c.get("supabase");
-	const user = c.get("user");
+	const supabase: SupabaseClient = c.get("supabase");
+	const user = c.get("user") as AuthUser;
 
 	// 1. Get the payload from the student's app
-	const { token, latitude, longitude } = await c.req.json();
+	const { token, latitude, longitude } = await c.req.json<{
+		token: string;
+		latitude: number;
+		longitude: number;
+	}>();
 
 	// 2. Validate input
 	if (!token || latitude === undefined || longitude === undefined) {

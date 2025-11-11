@@ -2,7 +2,6 @@ import { google } from "@ai-sdk/google";
 import { type CoreMessage, generateText, stepCountIs, tool } from "ai";
 import { Hono } from "hono";
 import "dotenv/config";
-import type { AuthUser, SupabaseClient } from "@supabase/supabase-js";
 import { tavily } from "@tavily/core";
 import { HTTPException } from "hono/http-exception";
 import { PDFParse } from "pdf-parse";
@@ -67,8 +66,8 @@ app.post("/chat", async (c) => {
 		messages = jsonBody.messages;
 	}
 
-	const supabase: SupabaseClient = c.get("supabase");
-	const user = c.get("user") as AuthUser;
+	const supabase = c.get("supabase");
+	const user = c.get("user");
 
 	// Process file attachments and add them to the last user message
 	if (attachedFiles.length > 0 && messages.length > 0) {

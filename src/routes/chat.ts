@@ -1,14 +1,15 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import type { Variables } from "@/types/auth";
+import type { AuthUser, Variables } from "@/types/auth";
 import { authMiddleware } from "../middlewares/auth";
 
 const app = new Hono<{ Variables: Variables }>();
 app.use("*", authMiddleware); // All chat routes require login
 
 app.get("/contacts", async (c) => {
-	const supabase = c.get("supabase");
-	const user = c.get("user");
+	const supabase: SupabaseClient = c.get("supabase");
+	const user = c.get("user") as AuthUser;
 
 	// Call the RPC function we just created
 	const { data, error } = await supabase.rpc("get_student_chat_contacts", {
@@ -30,8 +31,8 @@ app.get("/contacts", async (c) => {
  * and the *other* participant's info.
  */
 app.get("/rooms", async (c) => {
-	const supabase = c.get("supabase");
-	const user = c.get("user");
+	const supabase: SupabaseClient = c.get("supabase");
+	const user = c.get("user") as AuthUser;
 
 	// 1. Simply call the RPC function we created
 	const { data, error } = await supabase.rpc("get_user_chat_rooms", {
@@ -46,14 +47,21 @@ app.get("/rooms", async (c) => {
 	// The RPC returns flat columns (e.g., 'other_participant_full_name').
 	// We nest this data to match the structure the Flutter app expects.
 	const formattedData = data
-		? data.map((row: any) => ({
-				room_id: row.room_id,
-				other_participant: {
-					id: row.other_participant_id,
-					full_name: row.other_participant_full_name,
-					role: row.other_participant_role,
-				},
-			}))
+		? data.map(
+				(row: {
+					room_id: string;
+					other_participant_id: string;
+					other_participant_full_name: string;
+					other_participant_role: string;
+				}) => ({
+					room_id: row.room_id,
+					other_participant: {
+						id: row.other_participant_id,
+						full_name: row.other_participant_full_name,
+						role: row.other_participant_role,
+					},
+				}),
+			)
 		: [];
 
 	// 3. Return the clean, nested JSON
@@ -66,9 +74,9 @@ app.get("/rooms", async (c) => {
  * Securely finds or creates a 1-on-1 chat room.
  */
 app.post("/initiate", async (c) => {
-	const supabase = c.get("supabase");
-	const user = c.get("user");
-	const { recipient_id } = await c.req.json();
+	const supabase: SupabaseClient = c.get("supabase");
+	const user = c.get("user") as AuthUser;
+	const { recipient_id } = await c.req.json<{ recipient_id: string }>();
 
 	if (!recipient_id) {
 		throw new HTTPException(400, { message: "recipient_id is required" });
@@ -95,9 +103,9 @@ app.post("/initiate", async (c) => {
  * Fetches the message history for one room.
  */
 app.get("/rooms/:roomId/messages", async (c) => {
-	const supabase = c.get("supabase");
+	const supabase: SupabaseClient = c.get("supabase");
 	const roomId = c.req.param("roomId");
-	const { limit = 50 } = c.req.query();
+	const { limit = "50" } = c.req.query();
 
 	// RLS (from Step 1) automatically ensures the user can only
 	// query rooms they are a part of.
@@ -126,10 +134,10 @@ app.get("/rooms/:roomId/messages", async (c) => {
  * Inserts a new message into the database.
  */
 app.post("/rooms/:roomId/messages", async (c) => {
-	const supabase = c.get("supabase");
-	const user = c.get("user");
+	const supabase: SupabaseClient = c.get("supabase");
+	const user = c.get("user") as AuthUser;
 	const roomId = c.req.param("roomId");
-	const { content } = await c.req.json();
+	const { content } = await c.req.json<{ content: string }>();
 
 	if (!content) {
 		throw new HTTPException(400, { message: "content is required" });

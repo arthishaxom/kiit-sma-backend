@@ -1,6 +1,7 @@
 /** biome-ignore-all lint/style/noNonNullAssertion: ENV */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Context, Next } from "hono";
+import type { AuthUser } from "@/types/auth";
 import "dotenv/config";
 
 const authVerificationClient = createClient(
@@ -35,14 +36,14 @@ export const authMiddleware = async (c: Context, next: Next) => {
 		return c.json({ error: "User profile not found" }, 404);
 	}
 
-	c.set("user", profile);
+	c.set("user", profile as AuthUser);
 	await next();
 };
 
 // Role guard middleware (no client usage)
 export const roleGuard = (roles: Array<string>) => {
 	return async (c: Context, next: Next) => {
-		const user = c.get("user");
+		const user = c.get("user") as AuthUser;
 		if (!user || !roles.includes(user.role)) {
 			return c.json({ error: "Forbidden: Insufficient privileges" }, 403);
 		}
