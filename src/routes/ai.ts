@@ -350,7 +350,7 @@ Review this resume. Provide:
 Format as simple Markdown.`;
 
 	const { text } = await generateText({
-		model: google("models/gemini-2.0-flash-exp"),
+		model: google("gemini-2.5-flash"),
 		system: systemPrompt,
 		prompt: resume_text,
 	});
