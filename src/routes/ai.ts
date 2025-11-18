@@ -177,7 +177,7 @@ Use tools **whenever relevant**, and your own reasoning otherwise.
 						.from("fees")
 						.select("total_amount, due_date, status, payment_history(amount)")
 						.eq("user_id", user.id)
-						.in("status", ["overdue", "partial", "due"]);
+						.in("status", ["overdue", "partial", "due", "paid"]);
 
 					if (error) throw new HTTPException(500, { message: error.message });
 					let total_due = 0;

@@ -46,7 +46,7 @@ app.get("/summary", async (c) => {
 		.from("fees")
 		.select("total_amount, due_date, status, payment_history(amount)")
 		.eq("user_id", user.id)
-		.in("status", ["overdue", "partial", "due"]) // Include 'due' for newly created fees
+		.in("status", ["overdue", "partial", "due", "paid"]) // Include 'due' for newly created fees
 		.order("due_date", { ascending: true });
 
 	if (error) {
